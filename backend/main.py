@@ -8,15 +8,38 @@ from typing import Annotated, Literal
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
-from backend.config import CORS_ORIGINS, OUTPUT_DIR, OUTPUT_TTL_SECONDS
+from backend.config import CHECKPOINT_PATH, CORS_ORIGINS, OUTPUT_DIR, OUTPUT_TTL_SECONDS
 from backend.sam3d_wrapper import SAM3DWrapper
 from backend.segmentation import auto_segment
 
 
+def _download_model_if_needed() -> None:
+    """Download TRELLIS weights from HF Hub if not already present."""
+    if CHECKPOINT_PATH.exists() and any(CHECKPOINT_PATH.iterdir()):
+        return
+    print(f"[setup] Downloading TRELLIS model to {CHECKPOINT_PATH} ...")
+    try:
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            "JeffreyXiang/TRELLIS-image-large",
+            local_dir=str(CHECKPOINT_PATH),
+            ignore_patterns=["*.bin"],   # prefer safetensors
+        )
+        print("[setup] Model download complete.")
+    except Exception as exc:
+        print(f"[setup] Model download failed: {exc}")
+        raise
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Download model weights if missing (first run on HF Space)
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _download_model_if_needed)
+
     app.state.wrapper = SAM3DWrapper()
     cleanup_task = asyncio.create_task(_cleanup_loop())
     yield
@@ -97,7 +120,7 @@ async def serve_file(filename: str):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "worker": True}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -119,3 +142,11 @@ async def _cleanup_loop():
         for f in OUTPUT_DIR.glob("*.glb"):
             if now - f.stat().st_mtime > OUTPUT_TTL_SECONDS:
                 f.unlink(missing_ok=True)
+
+
+# ── Serve React frontend (must be last — catches all unmatched routes) ─────────
+# When running as a HF Space Docker container, the built frontend lives at
+# /app/frontend/dist. In local dev, the Vite dev server handles the frontend.
+_frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+if _frontend_dist.exists():
+    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="static")

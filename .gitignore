@@ -11,6 +11,7 @@ checkpoints/
 
 # Generated 3D outputs
 backend/outputs/
+/tmp/outputs/
 
 # Frontend
 frontend/node_modules/
