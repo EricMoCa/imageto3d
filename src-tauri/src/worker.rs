@@ -12,8 +12,17 @@ use tokio::time::{sleep, Duration, Instant};
 use tracing::{error, info, warn};
 
 const WORKER_PORT: u16 = 8001;
-const HEALTH_TIMEOUT_SECS: u64 = 180; // 3 min — model load can be slow
+const HEALTH_TIMEOUT_SECS: u64 = 300; // 5 min — model load can be slow
 const HEALTH_POLL_INTERVAL_MS: u64 = 2000;
+
+/// Show the main window unconditionally. Called both on success and on error
+/// so the user always sees the UI rather than a frozen taskbar icon.
+fn show_window(handle: &AppHandle) {
+    if let Some(window) = handle.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
 
 pub async fn start(
     handle: AppHandle,
@@ -29,10 +38,22 @@ pub async fn start(
         env_dir.join("python.exe")
     } else {
         error!("Python not found in {} (checked Scripts/ and root)", env_dir.display());
-        server::broadcast_setup_event("WORKER_ERROR:Python not found");
+        server::broadcast_setup_event("WORKER_ERROR:Python not found in env directory");
+        show_window(&handle);
         return;
     };
     info!("Using Python: {}", python.display());
+    info!("Project root: {}", project_root.display());
+
+    // Build PYTHONPATH: project_root + sam-3d-objects (TRELLIS source)
+    // This ensures backend/ and TRELLIS are importable regardless of cwd.
+    let trellis_path = project_root.join("sam-3d-objects");
+    let pythonpath = if trellis_path.exists() {
+        format!("{};{}", project_root.display(), trellis_path.display())
+    } else {
+        project_root.to_string_lossy().to_string()
+    };
+    info!("PYTHONPATH: {}", pythonpath);
 
     info!("Spawning Python worker on port {WORKER_PORT}...");
     server::broadcast_setup_event("WORKER_START:Iniciando worker Python...");
@@ -53,6 +74,7 @@ pub async fn start(
         .env("IMAGETO3D_MODELS_DIR", models_dir.to_str().unwrap_or(""))
         .env("IMAGETO3D_OUTPUT_DIR", output_dir.to_str().unwrap_or(""))
         .env("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:512")
+        .env("PYTHONPATH", &pythonpath)
         .kill_on_drop(true)
         .spawn()
     {
@@ -60,6 +82,7 @@ pub async fn start(
         Err(e) => {
             error!("Failed to spawn Python worker: {e}");
             server::broadcast_setup_event(format!("WORKER_ERROR:{e}"));
+            show_window(&handle);
             return;
         }
     };
@@ -67,6 +90,7 @@ pub async fn start(
     info!("Worker PID: {:?}", child.id());
 
     // Poll /worker-health until ready or timeout.
+    // Also watch for the process dying immediately (import error, missing module, etc.)
     let deadline = Instant::now() + Duration::from_secs(HEALTH_TIMEOUT_SECS);
     let client = reqwest::Client::new();
     let health_url = format!("http://127.0.0.1:{WORKER_PORT}/worker-health");
@@ -74,9 +98,25 @@ pub async fn start(
     loop {
         if Instant::now() > deadline {
             error!("Worker health timeout after {HEALTH_TIMEOUT_SECS}s");
-            server::broadcast_setup_event("WORKER_ERROR:Health check timeout");
+            server::broadcast_setup_event("WORKER_ERROR:Health check timeout — model may be loading");
             child.kill().await.ok();
+            show_window(&handle);
             return;
+        }
+
+        // Check if process already exited (immediate crash)
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                error!("Worker exited immediately with: {status}");
+                server::broadcast_setup_event(format!(
+                    "WORKER_ERROR:Worker crashed on startup (exit {}). Check that backend/ is accessible and all Python deps are installed.",
+                    status
+                ));
+                show_window(&handle);
+                return;
+            }
+            Ok(None) => {} // still running
+            Err(e) => warn!("try_wait error: {e}"),
         }
 
         match client.get(&health_url).timeout(Duration::from_secs(5)).send().await {
@@ -93,12 +133,7 @@ pub async fn start(
     // Mark worker ready so Axum starts proxying.
     server::set_worker_ready(true);
     server::broadcast_setup_event("WORKER_READY");
-
-    // Show the main window and navigate to the app.
-    if let Some(window) = handle.get_webview_window("main") {
-        let _ = window.show();
-        // The window already points to http://localhost:8000 (Axum) — no nav needed.
-    }
+    show_window(&handle);
 
     // Wait for the worker process to exit (shouldn't happen normally).
     match child.wait().await {

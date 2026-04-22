@@ -38,7 +38,12 @@
     ],
     "resources": {
       "resources/uv.exe": "resources/uv.exe",
-      "resources/requirements_worker.txt": "resources/requirements_worker.txt"
+      "resources/requirements_worker.txt": "resources/requirements_worker.txt",
+      "../backend/worker.py": "backend/worker.py",
+      "../backend/config.py": "backend/config.py",
+      "../backend/sam3d_wrapper.py": "backend/sam3d_wrapper.py",
+      "../backend/segmentation.py": "backend/segmentation.py",
+      "../backend/main.py": "backend/main.py"
     },
     "windows": {
       "nsis": {
