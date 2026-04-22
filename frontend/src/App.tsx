@@ -1,47 +1,15 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useGenerate3D } from "./hooks/useGenerate3D";
 import { DropZone } from "./components/DropZone";
 import { MultiDropZone } from "./components/MultiDropZone";
-import { SetupWizard } from "./components/SetupWizard";
 import { StatusBar } from "./components/StatusBar";
 import { Viewer3D } from "./components/Viewer3D";
 import { DownloadButton } from "./components/DownloadButton";
 import type { AppMode, Quality, Style } from "./types";
 
-type AppPhase = "loading" | "setup" | "ready";
-
 export function App() {
   const { status, glbUrl, error, generate, generateMulti, reset } = useGenerate3D();
   const [mode, setMode] = useState<AppMode>("single");
-  const [phase, setPhase] = useState<AppPhase>("loading");
-
-  // On mount, check /health to determine if we need the setup wizard.
-  useEffect(() => {
-    fetch("/health")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.worker === true) {
-          setPhase("ready");
-        } else {
-          // Worker not ready — either setup is in progress or first run.
-          setPhase("setup");
-        }
-      })
-      .catch(() => {
-        // Axum not yet up (during dev fallback) — assume ready.
-        setPhase("ready");
-      });
-  }, []);
-
-  if (phase === "loading") return null; // Brief flicker prevention
-
-  if (phase === "setup") {
-    return (
-      <SetupWizard
-        onComplete={() => setPhase("ready")}
-      />
-    );
-  }
 
   function handleModeChange(m: AppMode) {
     setMode(m);
