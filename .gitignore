@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+.eggs/
+
+# Model checkpoints (large binary files — downloaded at runtime)
+checkpoints/
+
+# Generated 3D outputs
+backend/outputs/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Rust / Tauri
+src-tauri/target/
+
+# Placeholder uv.exe (real one downloaded by build script)
+src-tauri/resources/uv.exe
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Env files
+.env
+.env.local
+
+# Misc project dirs not needed
+sam-3d-objects/
+extensions/
+
+# Claude Code local settings
+.claude/

@@ -1,0 +1,6 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+pillow>=10.0.0
+rembg>=2.0.57
+# TRELLIS (código en sam-3d-objects/) y CUDA: ver scripts/setup-imageto3d-windows.ps1

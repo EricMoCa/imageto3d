@@ -1,0 +1,8 @@
+# Referencia; en Windows el flujo recomendado es scripts/setup-imageto3d-windows.ps1
+# (TRELLIS + PyTorch CUDA no encajan bien en un solo conda-forge puro).
+name: imageto3d
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip

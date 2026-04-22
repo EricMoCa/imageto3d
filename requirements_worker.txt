@@ -1,0 +1,41 @@
+# Dependencias del Python inference worker.
+# PyTorch, spconv, kaolin y xformers se instalan ANTES por setup.rs.
+# Este archivo cubre el resto de las dependencias.
+
+# API server
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# Image processing
+pillow>=10.0.0
+
+# Background removal / segmentation
+rembg>=2.0.57
+onnxruntime
+
+# Numerical
+numpy<2
+scipy
+
+# 3D mesh utilities
+trimesh>=4.0.0
+pygltflib>=1.16.0
+open3d>=0.18.0
+xatlas
+pyvista
+pymeshfix
+igraph
+
+# ML utilities
+transformers
+imageio
+imageio-ffmpeg
+tqdm
+easydict
+opencv-python-headless
+
+# HuggingFace model download
+huggingface_hub
+
+# TRELLIS utility dependency
+git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
