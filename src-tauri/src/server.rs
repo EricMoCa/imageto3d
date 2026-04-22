@@ -32,10 +32,10 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::sync::broadcast;
 use tokio_stream::{wrappers::BroadcastStream, StreamExt as _};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 // ── embedded frontend (compiled into binary) ───────────────────────────────────
@@ -73,7 +73,8 @@ pub type SharedState = Arc<AppState>;
 static STATE: OnceCell<SharedState> = OnceCell::new();
 
 /// Start the Axum server on port 8000. This function never returns.
-pub async fn start(_handle: AppHandle, output_dir: PathBuf) {
+pub async fn start(handle: AppHandle, output_dir: PathBuf) {
+    let _handle = handle;
     let state = Arc::new(AppState::new(output_dir));
     STATE.set(state.clone()).ok();
 
@@ -94,10 +95,46 @@ pub async fn start(_handle: AppHandle, output_dir: PathBuf) {
             info!("Axum listening on http://{addr}");
             l
         }
-        Err(e) => {
-            error!("Cannot bind port 8000 (another instance may be running): {e}");
-            // Another instance is already running and serving — just exit this one.
-            std::process::exit(0);
+        Err(_) => {
+            // Port is in use. Check if it's a healthy Imageto3D instance.
+            let client = reqwest::Client::new();
+            let healthy = client
+                .get("http://127.0.0.1:8000/health")
+                .timeout(std::time::Duration::from_secs(2))
+                .send()
+                .await
+                .map(|r| r.status().is_success())
+                .unwrap_or(false);
+
+            if healthy {
+                // Another live instance is serving — bring its window forward.
+                info!("Another instance is running and healthy — showing its window and exiting.");
+                if let Some(window) = _handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+                std::process::exit(0);
+            } else {
+                // Stale process holding the port. Kill it and retry once.
+                warn!("Port 8000 held by a stale process — killing and retrying.");
+                #[cfg(windows)]
+                {
+                    let _ = std::process::Command::new("cmd")
+                        .args(["/C", "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :8000') do taskkill /F /PID %a"])
+                        .output();
+                }
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                match tokio::net::TcpListener::bind(addr).await {
+                    Ok(l) => {
+                        info!("Axum listening on http://{addr} (after killing stale process)");
+                        l
+                    }
+                    Err(e) => {
+                        error!("Still cannot bind port 8000 after retry: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
         }
     };
     if let Err(e) = axum::serve(listener, app).await {
