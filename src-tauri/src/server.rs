@@ -89,11 +89,20 @@ pub async fn start(_handle: AppHandle, output_dir: PathBuf) {
         .with_state(state);
 
     let addr = "127.0.0.1:8000";
-    info!("Axum listening on http://{addr}");
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .expect("Cannot bind port 8000 — is another instance running?");
-    axum::serve(listener, app).await.expect("Axum server error");
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => {
+            info!("Axum listening on http://{addr}");
+            l
+        }
+        Err(e) => {
+            error!("Cannot bind port 8000 (another instance may be running): {e}");
+            // Another instance is already running and serving — just exit this one.
+            std::process::exit(0);
+        }
+    };
+    if let Err(e) = axum::serve(listener, app).await {
+        error!("Axum server error: {e}");
+    }
 }
 
 // ── SSE / state helpers ───────────────────────────────────────────────────────
