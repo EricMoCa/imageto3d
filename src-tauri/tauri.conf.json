@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "identifier": "com.imageto3d.app",
   "build": {
-    "frontendDist": "../frontend/dist",
+    "frontendDist": "http://localhost:8000",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "cd ../frontend && npm run dev",
     "beforeBuildCommand": "cd ../frontend && npm run build"
@@ -20,7 +20,8 @@
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
-        "visible": false
+        "visible": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {
