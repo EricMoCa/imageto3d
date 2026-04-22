@@ -14,7 +14,7 @@ Pasos:
 
 use crate::{server, worker};
 use std::path::{Path, PathBuf};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tracing::{error, info};
@@ -27,6 +27,11 @@ pub async fn run(handle: AppHandle, app_data_dir: PathBuf, resource_dir: PathBuf
         let msg = format!("SETUP_ERROR:{e}");
         error!("{msg}");
         server::broadcast_setup_event(msg);
+        // Ensure the window is visible so the user sees the error message.
+        if let Some(w) = handle.get_webview_window("main") {
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
     }
 }
 

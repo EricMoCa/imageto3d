@@ -3,7 +3,7 @@ mod server;
 mod setup;
 mod worker;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 use tauri::{App, Manager};
 use tracing::info;
 
@@ -53,6 +53,17 @@ pub fn run() {
             let output_dir_for_cleanup = output_dir.clone();
             tauri::async_runtime::spawn(async move {
                 cleanup::run(output_dir_for_cleanup).await;
+            });
+
+            // Show the window after a short delay so Axum has time to bind and
+            // the WebView can connect. This guarantees the window is always
+            // visible regardless of whether setup or worker reaches show_window.
+            let handle_show = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(800)).await;
+                if let Some(w) = handle_show.get_webview_window("main") {
+                    let _ = w.show();
+                }
             });
 
             // Kick off setup or start worker.
